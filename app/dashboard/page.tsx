@@ -7,24 +7,14 @@ import { Button } from "@/components/ui/button"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { RefreshCw } from "lucide-react"
 
-// Datos simulados para la gráfica
-const generateVoltageData = () => {
-  const now = new Date()
-  const data = []
-
-  for (let i = 0; i < 20; i++) {
-    const time = new Date(now.getTime() - (19 - i) * 60000) // Cada minuto hacia atrás
-    data.push({
-      time: time.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
-      voltage: (120 + Math.random() * 10 - 5).toFixed(2), // Voltaje entre 115-125V
-    })
-  }
-
-  return data
+type VoltageRow = {
+  id: number
+  ts: string
+  volt: number
 }
 
 export default function DashboardPage() {
-  const [voltageData, setVoltageData] = useState(generateVoltageData())
+  const [voltageData, setVoltageData] = useState<{ time: string; voltage: number }[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(new Date())
   const router = useRouter()
@@ -34,19 +24,39 @@ export default function DashboardPage() {
     const isAuthenticated = localStorage.getItem("dmg9000_authenticated")
     if (!isAuthenticated) {
       router.push("/")
+    } else {
+      fetchData()
     }
   }, [router])
 
-  const handleRefresh = async () => {
+  const fetchData = async () => {
     setIsLoading(true)
+    try {
+      const res = await fetch("/api/voltages")
+      if (!res.ok) throw new Error("Error en la API")
 
-    // Simular fetch a endpoint
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+      const rows: VoltageRow[] = await res.json()
 
-    // Generar nuevos datos
-    setVoltageData(generateVoltageData())
-    setLastUpdate(new Date())
-    setIsLoading(false)
+      // Convertir datos de BD -> formato para Recharts
+      const formatted = rows.map((row) => ({
+        time: new Date(row.ts).toLocaleTimeString("es-ES", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        voltage: row.volt,
+      }))
+
+      setVoltageData(formatted.reverse()) // reverse para que se grafiquen en orden ascendente
+      setLastUpdate(new Date())
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleRefresh = () => {
+    fetchData()
   }
 
   const handleLogout = () => {
@@ -94,7 +104,9 @@ export default function DashboardPage() {
                   <div className="text-sm text-muted-foreground">Estado</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold">{voltageData[voltageData.length - 1]?.voltage}V</div>
+                  <div className="text-2xl font-bold">
+                    {voltageData[voltageData.length - 1]?.voltage ?? "-"}V
+                  </div>
                   <div className="text-sm text-muted-foreground">Voltaje Actual</div>
                 </div>
                 <div className="text-center">
